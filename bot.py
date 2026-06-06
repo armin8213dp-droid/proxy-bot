@@ -242,7 +242,7 @@ def format_proxy_message(proxies):
     msg += "   🔰 I R A N  P R O X Y 🔰\n"
     msg += "━━━━━━━━━━━━━━━━━━━━━\n\n"
     msg += "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n\n"
-    for i, link in enumerate(proxies[:5], 1):
+    for i, link in enumerate(proxies[:2], 1):
         msg += f"💎 پروکسی {i}  —  MTProto\n"
         msg += f"╰─► [🔗 اتصال مستقیم]({link})\n\n"
     msg += "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n\n"
