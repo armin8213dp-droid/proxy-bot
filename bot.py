@@ -5,7 +5,6 @@ import requests
 import socket
 import base64
 import json
-import feedparser
 from bs4 import BeautifulSoup
 from telegram import Bot
 from telegram.error import TelegramError
@@ -23,18 +22,46 @@ HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
 }
 
-TELEGRAM_CHANNELS_MTPROTO = [
-    "ProxyMTProto", "proxy_ir", "mtpro_xyz",
-    "exbta", "free_proxy_ru", "proxylist_ru",
-    "configV2rayNG", "freev2ray"
+# سرورهای تلگرام برای تست MTProto
+TELEGRAM_SERVERS = [
+    "149.154.167.51",
+    "149.154.167.91",
+    "149.154.167.92",
 ]
 
-TELEGRAM_CHANNELS_V2RAY = [
-    "v2ray_configs", "vlessconfig", "vmessorg",
-    "clash_config", "shadowsocks_ir", "freev2ray",
-    "configV2rayNG"
+# کانال های MTProto
+MTPROTO_CHANNELS = [
+    "ProxyMTProto",
+    "proxy_ir",
+    "mtpro_xyz",
+    "exbta",
+    "proxy_ru",
+    "freeproxy_io",
+    "freev2ray",
 ]
 
+# کانال های V2Ray
+V2RAY_CHANNELS = [
+    "v2ray_configs",
+    "vlessconfig",
+    "vmessorg",
+    "clash_config",
+    "shadowsocks_ir",
+    "freev2ray",
+    "configV2rayNG",
+]
+
+# منابع GitHub برای V2Ray
+V2RAY_GITHUB = [
+    "https://raw.githubusercontent.com/soroushmirzaei/telegram-configs-collector/main/protocols/vmess",
+    "https://raw.githubusercontent.com/soroushmirzaei/telegram-configs-collector/main/protocols/vless",
+    "https://raw.githubusercontent.com/mahdibland/V2RayAggregator/master/Eternity.txt",
+]
+
+# منبع GitHub برای MTProto
+MTPROTO_GITHUB = "https://raw.githubusercontent.com/soroushmirzaei/telegram-proxies-collector/main/proxies/mtproto"
+
+# اشعار پند آموز
 POEMS = [
     ("حافظ", "بیا که قصر امل سخت سست بنیاد است\nبیار باده که بنیاد عمر بر باد است"),
     ("سعدی", "بنی آدم اعضای یکدیگرند\nکه در آفرینش ز یک گوهرند"),
@@ -45,79 +72,112 @@ POEMS = [
     ("فردوسی", "چو ایران نباشد تن من مباد\nبدین بوم و بر زنده یک تن مباد"),
     ("خیام", "این قافله عمر عجب می‌گذرد\nدریاب دمی که با طرب می‌گذرد"),
     ("مولانا", "من کجا بودم عجب کو بود من\nحیرت آمد حیرت آمد حیرتم"),
-    ("سعدی", "گر حکم شود که مست گیرند\nاول که دهند داد مستان"),
+    ("سعدی", "توانگری به هنر است نه به مال\nگوهر ذات است نه زر و جمال"),
 ]
 
-def get_mtproto_proxies():
+# ==================== جمع آوری ====================
+
+def fetch_mtproto_github():
     proxies = []
     try:
-        url = "https://raw.githubusercontent.com/soroushmirzaei/telegram-proxies-collector/main/proxies/mtproto"
-        r = requests.get(url, headers=HEADERS, timeout=15)
+        r = requests.get(MTPROTO_GITHUB, headers=HEADERS, timeout=15)
         for line in r.text.strip().split('\n'):
             line = line.strip()
             if 'tg://proxy?' in line and 'secret=' in line:
-                proxies.append({'type': 'MTProto', 'link': line})
+                proxies.append(line)
     except Exception as e:
-        logger.error(f"GitHub MTProto خطا: {e}")
+        logger.error(f"GitHub MTProto: {e}")
+    return proxies
 
-    for channel in TELEGRAM_CHANNELS_MTPROTO:
+def fetch_mtproto_channels():
+    proxies = []
+    for channel in MTPROTO_CHANNELS:
         try:
             url = f"https://t.me/s/{channel}"
             r = requests.get(url, headers=HEADERS, timeout=10)
             soup = BeautifulSoup(r.text, 'html.parser')
-            messages = soup.find_all('div', class_='tgme_widget_message_text')
-            for msg in messages:
-                links = msg.find_all('a')
-                for link in links:
+            for msg in soup.find_all('div', class_='tgme_widget_message_text'):
+                for link in msg.find_all('a'):
                     href = link.get('href', '')
                     if 'tg://proxy?' in href and 'secret=' in href:
-                        proxies.append({'type': 'MTProto', 'link': href})
+                        proxies.append(href)
+                text = msg.get_text()
+                for part in text.split():
+                    if part.startswith('tg://proxy?') and 'secret=' in part:
+                        proxies.append(part)
         except Exception as e:
-            logger.error(f"خطا در {channel}: {e}")
+            logger.error(f"کانال {channel}: {e}")
     return proxies
 
-def get_v2ray_configs():
+def fetch_v2ray_github():
     configs = []
-    v2ray_sources = [
-        "https://raw.githubusercontent.com/soroushmirzaei/telegram-configs-collector/main/protocols/vmess",
-        "https://raw.githubusercontent.com/soroushmirzaei/telegram-configs-collector/main/protocols/vless",
-        "https://raw.githubusercontent.com/mahdibland/V2RayAggregator/master/Eternity.txt",
-    ]
-    for url in v2ray_sources:
+    for url in V2RAY_GITHUB:
         try:
             r = requests.get(url, headers=HEADERS, timeout=15)
             for line in r.text.strip().split('\n'):
                 line = line.strip()
-                if line.startswith('vmess://') or line.startswith('vless://') or line.startswith('trojan://'):
-                    configs.append({'type': 'V2Ray', 'link': line})
+                if line.startswith(('vmess://', 'vless://', 'trojan://')):
+                    configs.append(line)
         except Exception as e:
-            logger.error(f"V2Ray GitHub خطا: {e}")
+            logger.error(f"GitHub V2Ray: {e}")
+    return configs
 
-    for channel in TELEGRAM_CHANNELS_V2RAY:
+def fetch_v2ray_channels():
+    configs = []
+    for channel in V2RAY_CHANNELS:
         try:
             url = f"https://t.me/s/{channel}"
             r = requests.get(url, headers=HEADERS, timeout=10)
             soup = BeautifulSoup(r.text, 'html.parser')
-            messages = soup.find_all('div', class_='tgme_widget_message_text')
-            for msg in messages:
+            for msg in soup.find_all('div', class_='tgme_widget_message_text'):
                 text = msg.get_text()
                 for line in text.split('\n'):
                     line = line.strip()
-                    if line.startswith('vmess://') or line.startswith('vless://') or line.startswith('trojan://'):
-                        configs.append({'type': 'V2Ray', 'link': line})
+                    if line.startswith(('vmess://', 'vless://', 'trojan://')):
+                        configs.append(line)
         except Exception as e:
-            logger.error(f"خطا در {channel}: {e}")
+            logger.error(f"کانال {channel}: {e}")
     return configs
 
-def extract_v2ray_address(config):
-    """استخراج IP و پورت از کانفیگ V2Ray"""
+# ==================== تست ====================
+
+def test_mtproto(link):
+    """تست MTProto با سرور واقعی تلگرام"""
     try:
-        link = config['link']
+        if 'server=' not in link or 'port=' not in link:
+            return False
+        server = link.split('server=')[1].split('&')[0]
+        port = int(link.split('port=')[1].split('&')[0])
+        # تست اتصال به پروکسی
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(5)
+        result = sock.connect_ex((server, port))
+        sock.close()
+        if result != 0:
+            return False
+        # تست اتصال به سرور تلگرام از طریق پروکسی
+        tg_server = random.choice(TELEGRAM_SERVERS)
+        sock2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock2.settimeout(5)
+        result2 = sock2.connect_ex((tg_server, 443))
+        sock2.close()
+        return result2 == 0
+    except:
+        return False
+
+def extract_v2ray_address(link):
+    """استخراج host و port از کانفیگ V2Ray"""
+    try:
         if link.startswith('vmess://'):
-            decoded = base64.b64decode(link[8:] + '==').decode('utf-8')
+            padding = len(link[8:]) % 4
+            if padding:
+                link_padded = link[8:] + '=' * (4 - padding)
+            else:
+                link_padded = link[8:]
+            decoded = base64.b64decode(link_padded).decode('utf-8')
             data = json.loads(decoded)
-            return data.get('add', ''), int(data.get('port', 0))
-        elif link.startswith('vless://') or link.startswith('trojan://'):
+            return str(data.get('add', '')), int(data.get('port', 0))
+        elif link.startswith(('vless://', 'trojan://')):
             part = link.split('://')[1]
             if '@' in part:
                 addr_part = part.split('@')[1].split('?')[0].split('#')[0]
@@ -128,100 +188,63 @@ def extract_v2ray_address(config):
         pass
     return '', 0
 
-def test_socket(host, port, timeout=5):
-    """تست اتصال با socket"""
+def test_v2ray(link):
+    """تست V2Ray با socket"""
     try:
+        host, port = extract_v2ray_address(link)
         if not host or not port:
             return False
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(timeout)
+        sock.settimeout(5)
         result = sock.connect_ex((host, port))
         sock.close()
         return result == 0
     except:
         return False
 
-def test_mtproto(proxy):
-    try:
-        link = proxy['link']
-        if 'server=' in link and 'port=' in link:
-            server = link.split('server=')[1].split('&')[0]
-            port = int(link.split('port=')[1].split('&')[0])
-            return test_socket(server, port)
-        return False
-    except:
-        return False
-
-def test_v2ray(config):
-    """تست V2Ray با socket"""
-    host, port = extract_v2ray_address(config)
-    if host and port:
-        return test_socket(host, port)
-    return False
-
-def get_live_mtproto(proxies):
-    live = []
-    seen = set()
-    unique = []
-    for p in proxies:
-        if p['link'] not in seen:
-            seen.add(p['link'])
-            unique.append(p)
+def get_live_mtproto():
+    """جمع آوری و فیلتر MTProto های زنده"""
+    all_links = fetch_mtproto_github() + fetch_mtproto_channels()
+    # حذف تکراری
+    unique = list(dict.fromkeys(all_links))
     random.shuffle(unique)
-    for proxy in unique[:30]:
-        if test_mtproto(proxy):
-            live.append(proxy)
+    logger.info(f"MTProto کل: {len(unique)}")
+    live = []
+    for link in unique[:50]:
+        if test_mtproto(link):
+            live.append(link)
+            logger.info(f"MTProto زنده: {link[:60]}")
         if len(live) >= 10:
             break
+    logger.info(f"MTProto زنده: {len(live)}")
     return live
 
-def get_live_v2ray(configs):
-    """فیلتر V2Ray های زنده"""
-    live = []
-    seen = set()
-    unique = []
-    for c in configs:
-        if c['link'] not in seen:
-            seen.add(c['link'])
-            unique.append(c)
+def get_live_v2ray():
+    """جمع آوری و فیلتر V2Ray های زنده"""
+    all_links = fetch_v2ray_github() + fetch_v2ray_channels()
+    unique = list(dict.fromkeys(all_links))
     random.shuffle(unique)
-    logger.info(f"تست {min(30, len(unique))} کانفیگ V2Ray...")
-    for config in unique[:30]:
-        if test_v2ray(config):
-            live.append(config)
-            logger.info("V2Ray زنده پیدا شد!")
+    logger.info(f"V2Ray کل: {len(unique)}")
+    live = []
+    for link in unique[:50]:
+        if test_v2ray(link):
+            live.append(link)
+            logger.info(f"V2Ray زنده پیدا شد!")
         if len(live) >= 5:
             break
+    logger.info(f"V2Ray زنده: {len(live)}")
     return live
 
-def get_news():
-    news = []
-    feeds = [
-        ("ایران اینترنشنال", "https://www.iranintl.com/rss"),
-        ("BBC فارسی", "https://feeds.bbci.co.uk/persian/rss.xml"),
-        ("رادیو فردا", "https://www.radiofarda.com/api/zpdvqmiqte"),
-        ("رویترز", "https://feeds.reuters.com/reuters/topNews"),
-    ]
-    for source, url in feeds:
-        try:
-            feed = feedparser.parse(url)
-            for entry in feed.entries[:2]:
-                news.append({
-                    'source': source,
-                    'title': entry.title,
-                })
-        except Exception as e:
-            logger.error(f"خطا در RSS {source}: {e}")
-    return news
+# ==================== فرمت پیام ====================
 
 def format_proxy_message(proxies):
     msg = "━━━━━━━━━━━━━━━━━━━━━\n"
     msg += "   🔰 I R A N  P R O X Y 🔰\n"
     msg += "━━━━━━━━━━━━━━━━━━━━━\n\n"
     msg += "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n\n"
-    for i, proxy in enumerate(proxies[:5], 1):
+    for i, link in enumerate(proxies[:5], 1):
         msg += f"💎 پروکسی {i}  —  MTProto\n"
-        msg += f"╰─► [🔗 اتصال مستقیم]({proxy['link']})\n\n"
+        msg += f"╰─► [🔗 اتصال مستقیم]({link})\n\n"
     msg += "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n\n"
     msg += "✅ همه پروکسی‌ها تست شده و زنده‌اند\n"
     msg += "🔄 آپدیت بعدی: ۱۰ دقیقه دیگه\n"
@@ -234,32 +257,20 @@ def format_v2ray_message(configs):
     msg += "   🚀 V 2 R A Y  C O N F I G 🚀\n"
     msg += "━━━━━━━━━━━━━━━━━━━━━\n\n"
     msg += "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n\n"
-    selected = configs[:2]
-    for i, config in enumerate(selected, 1):
-        if config['link'].startswith('vmess'):
+    for i, link in enumerate(configs[:2], 1):
+        if link.startswith('vmess'):
             config_type = "VMess"
-        elif config['link'].startswith('vless'):
+        elif link.startswith('vless'):
             config_type = "VLess"
         else:
             config_type = "Trojan"
         msg += f"💎 کانفیگ {i}  —  {config_type}\n"
-        msg += f"`{config['link']}`\n\n"
+        msg += f"`{link}`\n\n"
     msg += "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n\n"
     msg += "✅ کانفیگ‌ها تست شده و زنده‌اند\n"
-    msg += "📱 برای استفاده: V2RayNG یا Nekoray نصب کن\n"
+    msg += "📱 اپ مورد نیاز: V2RayNG یا Nekoray\n"
     msg += "👥 کانال رو شیر کن و حمایت کن!\n"
     msg += "━━━━━━━━━━━━━━━━━━━━━"
-    return msg
-
-def format_news_message(news):
-    msg = "━━━━━━━━━━━━━━━━━━━━━\n"
-    msg += "   📰 A X B A R  |  اخبار مهم\n"
-    msg += "━━━━━━━━━━━━━━━━━━━━━\n\n"
-    for item in news[:5]:
-        msg += f"🔴 **{item['title']}**\n"
-        msg += f"📌 منبع: {item['source']}\n\n"
-    msg += "━━━━━━━━━━━━━━━━━━━━━\n"
-    msg += "📢 کانال ما رو دنبال کن!"
     return msg
 
 def format_poem_message():
@@ -272,70 +283,77 @@ def format_poem_message():
     msg += "━━━━━━━━━━━━━━━━━━━━━"
     return msg
 
+# ==================== تسک ها ====================
+
 async def proxy_task(bot):
     while True:
         try:
-            logger.info("جمع‌آوری پروکسی MTProto...")
-            all_proxies = get_mtproto_proxies()
-            live = get_live_mtproto(all_proxies)
+            logger.info("شروع تسک MTProto...")
+            live = get_live_mtproto()
             if live:
                 msg = format_proxy_message(live)
-                await bot.send_message(chat_id=CHANNEL_ID, text=msg, parse_mode='Markdown', disable_web_page_preview=True)
-                logger.info("پروکسی ارسال شد!")
+                await bot.send_message(
+                    chat_id=CHANNEL_ID,
+                    text=msg,
+                    parse_mode='Markdown',
+                    disable_web_page_preview=True
+                )
+                logger.info("MTProto ارسال شد!")
             else:
-                logger.warning("پروکسی زنده پیدا نشد!")
+                logger.warning("MTProto زنده پیدا نشد!")
+        except TelegramError as e:
+            logger.error(f"تلگرام خطا: {e}")
         except Exception as e:
-            logger.error(f"خطا در پروکسی: {e}")
+            logger.error(f"خطا در MTProto تسک: {e}")
         await asyncio.sleep(600)
 
 async def v2ray_task(bot):
     while True:
         try:
-            logger.info("جمع‌آوری V2Ray...")
-            configs = get_v2ray_configs()
-            live = get_live_v2ray(configs)
+            logger.info("شروع تسک V2Ray...")
+            live = get_live_v2ray()
             if live:
                 msg = format_v2ray_message(live)
-                await bot.send_message(chat_id=CHANNEL_ID, text=msg, parse_mode='Markdown', disable_web_page_preview=True)
+                await bot.send_message(
+                    chat_id=CHANNEL_ID,
+                    text=msg,
+                    parse_mode='Markdown',
+                    disable_web_page_preview=True
+                )
                 logger.info("V2Ray ارسال شد!")
             else:
                 logger.warning("V2Ray زنده پیدا نشد!")
+        except TelegramError as e:
+            logger.error(f"تلگرام خطا: {e}")
         except Exception as e:
-            logger.error(f"خطا در V2Ray: {e}")
-        await asyncio.sleep(3600)
-
-async def news_task(bot):
-    while True:
-        try:
-            logger.info("جمع‌آوری اخبار...")
-            news = get_news()
-            if news:
-                msg = format_news_message(news)
-                await bot.send_message(chat_id=CHANNEL_ID, text=msg, parse_mode='Markdown', disable_web_page_preview=True)
-                logger.info("اخبار ارسال شد!")
-        except Exception as e:
-            logger.error(f"خطا در اخبار: {e}")
+            logger.error(f"خطا در V2Ray تسک: {e}")
         await asyncio.sleep(3600)
 
 async def poem_task(bot):
     while True:
-        now = datetime.now()
-        if now.hour == 21 and now.minute < 1:
-            try:
+        try:
+            now = datetime.now()
+            if now.hour == 21 and now.minute == 0:
                 msg = format_poem_message()
-                await bot.send_message(chat_id=CHANNEL_ID, text=msg, parse_mode='Markdown')
+                await bot.send_message(
+                    chat_id=CHANNEL_ID,
+                    text=msg,
+                    parse_mode='Markdown'
+                )
                 logger.info("شعر ارسال شد!")
-            except Exception as e:
-                logger.error(f"خطا در شعر: {e}")
-            await asyncio.sleep(60)
+                await asyncio.sleep(61)
+        except TelegramError as e:
+            logger.error(f"تلگرام خطا: {e}")
+        except Exception as e:
+            logger.error(f"خطا در شعر تسک: {e}")
         await asyncio.sleep(30)
 
 async def main():
     bot = Bot(token=BOT_TOKEN)
+    logger.info("بات شروع به کار کرد!")
     await asyncio.gather(
         proxy_task(bot),
         v2ray_task(bot),
-        news_task(bot),
         poem_task(bot)
     )
 
